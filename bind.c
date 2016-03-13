@@ -32,7 +32,7 @@ typedef struct
 	char rev[STR_MAX];
 	int ssh_if;
 	char active[STR_MAX];
-	char detail[STR_MAX*10];
+	char detail[STR_MAX*10]; // TODO
 } device;
 
 
@@ -54,7 +54,6 @@ static size_t read_all_file(const char* fname, char* buf, size_t size)
 
 static int find_file(const char* name, const char* dir)
 {
-	size_t len = strlen(name);
 	DIR *dirp = opendir(dir);
 	struct dirent *dp = NULL;
 	while ((dp = readdir(dirp)) != NULL)
@@ -94,7 +93,7 @@ const char* find_module(const char* mod) // DONE
 	char* rte_target = getenv("RTE_TARGET");
 	if (rte_sdk && rte_target)
 	{
-		char path[PATH_MAX];
+		static char path[PATH_MAX];
 		sprintf(path, "%s/%s/kmod/%s.ko", rte_sdk, rte_target, mod);
 		if (!access(path, R_OK))
 			return path;
@@ -142,14 +141,12 @@ int has_driver(const char* drv)
 	return 0;
 }
 
-dict* get_pci_device_details(const char* dev_id) // DONE
+device get_pci_device_details(const char* dev_id) // DONE
 {
-	static dict* device;
-	device = malloc(sizeof(dict)*2);
-	strcat(device[0].name, "Ssh_if");
-	strcat(device[0].value, "False");
-	strcat(device[1].name, "Active");
-	strcat(device[1].value, "");
+	device dev;
+
+	strcpy(dev.ssh_if, "False");
+	strcpy(dev.active, "");
 
 	char cmd[256];
 	sprintf(cmd, "lspci -vmmks %s", dev_id);
@@ -157,7 +154,7 @@ dict* get_pci_device_details(const char* dev_id) // DONE
 
 	char* line;
 	line = strtok(extra_info, "\n");
-	int i = 3;
+	int i = 0;
 	while (line != NULL)
 	{
 		if (line == NULL || strlen(line) == 0)
@@ -165,15 +162,12 @@ dict* get_pci_device_details(const char* dev_id) // DONE
 
 		const char* name = strsep(&line, "\t"); // FIXME mb
 		const char* value = strsep(&line, "\t");
-		device = realloc(device, sizeof(device)*i);
-		strcat(device[i - 1].name, name);
-		strcat(device[i - 1].value, value);
+		strcat(((char*)&dev) + STR_MAX*i, value); // fill device struct
 
 		line = strtok(NULL, "\n");
-		++i;
 	}
 
-	return device;
+	return dev;
 }
 
 int get_nic_details()
@@ -237,7 +231,7 @@ int get_nic_details()
 	for (size_t i = 0; i < devices_size; ++i)
 	{
 		char* d = devices[i].slot;
-		strcpy(devices[i].detail, get_pci_device_details(d));
+		strcpy(devices[i].detail, get_pci_device_details(d).detail); // TODO remove detail
 
 		for (size_t j = 0; j < ssh_if_size; ++j)
 		{
@@ -345,7 +339,7 @@ void unbind_one(const char* dev_id, int force)
 		}
 	}
 
-	if (dev->ssh_if && !force)
+	if (dev == NULL || (dev->ssh_if && !force))
 	{
 		return;
 	}
@@ -359,31 +353,121 @@ void unbind_one(const char* dev_id, int force)
 	fclose(f);
 }
 
-int unbind_all()
+void unbind_all(const char* dev_list[], size_t size, int force)
 {
-	return 0;
+	for (size_t i = 0; i < size; ++i)
+	{
+		unbind_one(dev_list[i], force);
+	}
 }
 
-int bind_all()
+void bind_one(const char* dev_id, const char* driver, int force)
 {
-	return 0;
+	device* dev = NULL;
+	for (int i = 0; i < devices_size; ++i) {
+		if (!strcmp(dev_id, devices[i].slot))
+		{
+			dev = devices + i;
+		}
+	}
+
+	if (dev->ssh_if && !force)
+		return;
+
+	const char* saved_driver = NULL;
+	if (has_driver(dev->slot)) // FIXME mb !slot
+	{
+		if (!strcmp(dev->device, driver))
+		{
+			return;
+		}
+		else
+		{
+			saved_driver = dev->device; // TODO mb Driver_str
+			unbind_one(dev_id, force);
+			strcpy(dev->device, "");
+		}
+	}
+
+	for (int j = 0; j < 3; ++j)
+	{
+		if (dpdk_drivers[j]->found && strstr(dpdk_drivers, driver))
+		{
+			char path[STR_MAX];
+			sprintf(path, "/sys/bus/pci/drivers/%s/new_id", driver);
+			FILE* f = fopen(path, "w");
+			fprintf(f, "%04x %04x", atoi(dev->vendor), atoi(dev->device));
+			fclose(f);
+		}
+	}
+
+	char path[STR_MAX];
+	sprintf(path, "/sys/bus/pci/drivers/%s/bind", driver);
+	FILE* f = fopen(path, "a");
+	if (f == NULL)
+	{
+		if (saved_driver)
+		{
+			bind_one(dev_id, saved_driver, force);
+			return;
+		}
+	}
+	size_t ret = fwrite(dev_id, 1, strlen(dev_id), f);
+	fclose(f);
+	if (ret <= 0)
+	{
+		device tmp = get_pci_device_details(dev_id);
+		if (!strstr(tmp.device, "Driver_str")) // TODO Driver_str
+		{
+			return;
+		}
+
+		if (saved_driver == NULL)
+		{
+			bind_one(dev_id, saved_driver, force);
+		}
+	}
 }
 
-int display_devices()
+void bind_all(const char* dev_list[], size_t size, const char* driver, int force)
 {
-	return 0;
-}
+	for (size_t i = 0; i < size; ++i)
+	{
+		bind_one(dev_list[i], driver, force);
+	}
 
-int show_status()
-{
-	return 0;
+	for (int j = 0; j < devices_size; ++j)
+	{
+		int cont = 0;
+		if (strstr(devices[j].device, "Driver_str"))
+		{
+			for (int i = 0; i < size; ++i)
+			{
+				if (strstr(dev_list, devices[i].slot)) // FIXME mb
+				{
+					cont = 1;
+				}
+			}
+		}
+		if (cont)
+		{
+			continue;
+		}
+
+		char* d = devices[j].slot;
+		strcpy(devices[j].detail, get_pci_device_details(d).detail); // TODO remove detail
+
+		if (strstr(devices->detail, "Drive_str"))
+		{
+			unbind_one(d, force);
+		}
+	}
 }
 
 int main(int argc, char* argv[])
 {
 	//check_modules();
 	//get_nic_details();
-
-
+	
 	return 0;
 }
