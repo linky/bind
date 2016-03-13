@@ -5,25 +5,40 @@
 #include <string.h>
 #include <dirent.h>
 
-#define PATH_MAX 512
+#define STR_MAX 128
 #define ETHERNET_CLASS "0200"
+#define DEVICES_SIZE 20 // FIXME mb
 
 typedef struct driver
 {
-	char name[256];
+	char name[STR_MAX];
 	int found;
 } driver;
-driver* dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
-char** drivers;
 
 typedef struct dict
 {
-	char name[256];
-	char value[256];
+	char name[STR_MAX];
+	char value[STR_MAX];
 } dict;
 
-#define DEVICES_SIZE 20 // FIXME mb
-dict devices[DEVICES_SIZE]; // TODO
+typedef struct
+{
+	char slot[STR_MAX];
+	char class[STR_MAX];
+	char vendor[STR_MAX];
+	char device[STR_MAX];
+	char svendor[STR_MAX];
+	char sdevice[STR_MAX];
+	char rev[STR_MAX];
+	int ssh_if;
+	char active[STR_MAX];
+	char detail[STR_MAX*10];
+} device;
+
+
+driver* dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
+device devices[DEVICES_SIZE];
+size_t devices_size = 0;
 
 static size_t read_all_file(const char* fname, char* buf, size_t size)
 {
@@ -163,51 +178,38 @@ dict* get_pci_device_details(const char* dev_id) // DONE
 
 int get_nic_details()
 {
-	static dict* dev;
+	memset(devices, 0, sizeof(devices));
+	device dev = {0};
 
-	const char* dev_lines = check_output("lspci -Dvmmn");
-
+	char* dev_lines = check_output("lspci -Dvmmn");
 	char* dev_line;
 	dev_line = strtok(dev_lines, "\n");
-	int dev_size = 1;
+	int i = 0;
 	while (dev_line != NULL)
 	{
-		if (dev_line == NULL || strlen(dev_line) == 0)
+		if (strlen(dev_line) == 0)
 		{
-			for (size_t i = 0; i < dev_size; ++i)
+			i = 0;
+			if (!strcmp(dev.class, ETHERNET_CLASS))
 			{
-				if (!strcmp(dev[i].name, "Class") && !strcmp(dev[i].value, ETHERNET_CLASS))
-				{
-					if (!strcmp(dev[i].name, "Slot"))
-					{
-						const char* value = dev[i].value;
-						for (size_t j = 0; j < DEVICES_SIZE; ++j)
-						{
-							if (devices[j].name && !strcmp(dev[i].name, value))
-							{
-								strcat(devices[j].value, dev[i].value); // FIXME mb
-							}
-						}
-					}
-				}
-				else
-				{
-					const char* name = strsep(&dev_line, "\t");
-					const char* value = strsep(&dev_line, "\t");
-					dev = realloc(dev, sizeof(*dev)*dev_size);
-					strcat(dev[dev_size - 1].name, name);
-					strcat(dev[dev_size - 1].value, value);
-				}
+				devices[devices_size] = dev;
+				++devices_size;
 			}
 		}
+		else
+		{
+			const char* name = strsep(&dev_line, "\t");
+			const char* value = strsep(&dev_line, "\t");
+			strcpy(((char*)&dev) + STR_MAX*i, value); // fill device struct
+			++i;
+		}
 
-
-		dev_line = strtok(NULL, "\n");
+		strtok(NULL, "\n");
 	}
 
-	char ssh_if[20][256] = {0};
-	size_t ssh_if_size = 0;
 
+	char ssh_if[DEVICES_SIZE][STR_MAX] = {0};
+	size_t ssh_if_size = 0;
 	char* route = check_output("ip -o route");
 	char* new_route = calloc(strlen(route), 1);
 	char* line;
@@ -215,10 +217,9 @@ int get_nic_details()
 	while (line != NULL)
 	{
 		if (strstr(line, "169.254") == NULL)
-		strcat(new_route, line);
+			strcat(new_route, line);
 		line = strtok(NULL, "\n");
 	}
-
 	char* rt_info = calloc(strlen(new_route), 1);
 	line = strtok(new_route, " \n");
 	while (line != NULL)
@@ -233,67 +234,48 @@ int get_nic_details()
 		line = strtok(NULL, "\n");
 	}
 
-	for (size_t i = 0; i < DEVICES_SIZE; ++i)
+	for (size_t i = 0; i < devices_size; ++i)
 	{
-		char* d = devices[i].name;
-		if (d)
-		{
-			sprintf(devices[i].value, "%s%s", devices[i].value, get_pci_device_details(d));
-		}
+		char* d = devices[i].slot;
+		strcpy(devices[i].detail, get_pci_device_details(d));
 
 		for (size_t j = 0; j < ssh_if_size; ++j)
 		{
-			if (!strcmp(devices[j].name, "Ssh_if"))
-				strcpy(devices[j].value, "True");
-			if (!strcmp(devices[j].name, "Active"))
-				strcpy(devices[j].value, "*Active*");
-
-			if (!strlen(devices[j].name))
+			if (strstr(devices[i].detail, ssh_if[j]))
 			{
-				strcpy(devices[j+1].value, "*Active*");
-				strcpy(devices[j+2].value, "True");
+				devices[i].ssh_if = 1;
+				strcpy(devices[i].active, "*Active*");
 				break;
 			}
 		}
 
-		char* val = NULL;
-		if (!strcmp(devices[i].name, "Module_str"))
+		if (strstr(devices[i].detail, "Module_str"))
 		{
-			for (size_t l = 0; l < ssh_if_size; ++l)
+			for (size_t j = 0; j < 3; ++j)
 			{
-				if (!strcmp(devices[l].name, "Module_str"))
-					val = devices[l].value;
-			}
-
-			for (size_t k = 0; k < 3; ++k)
-			{
-				if (dpdk_drivers[k]->found && strstr(dpdk_drivers[k]->name, val))
+				if (dpdk_drivers[j]->found && strstr(devices[i].detail, dpdk_drivers[j]->name))
 				{
-					char buf[512];
-					sprintf(buf, "%s,%s", val, dpdk_drivers[k]);
-					strcpy(val, buf);
+					char buf[STR_MAX];
+					sprintf(buf, "%s,%s", devices[i].detail, dpdk_drivers[j]->name);
+					strcpy(devices[i].detail, buf);
 				}
 			}
 		}
 		else
 		{
-			for (size_t m = 0; m < DEVICES_SIZE; ++m)
+			char buf[STR_MAX];
+			for (size_t j = 0; j < 3; ++j)
 			{
-				if (strlen(devices[m].name) == 0)
+				if (dpdk_drivers[j]->found)
 				{
-					strcpy(devices[m].name, "Module_str");
-					char buf[1024];
-					for (size_t n = 0; n < 3; ++n)
-					{
-						if (dpdk_drivers[n]->found);
-						strcat(buf, dpdk_drivers[n]->name);
-						strcat(buf, ","); // FIXME mb
-					}
-					strcpy(devices[m].value, buf);
+					strcat(buf, dpdk_drivers[j]->name);
+					strcat(buf, ",");
 				}
 			}
+			strcat(devices[i].detail, buf);
 		}
 
+		/*
 		if (has_driver(d))
 		{
 			char* driver_str = NULL;
@@ -319,17 +301,62 @@ int get_nic_details()
 				line = strtok(NULL, "\n");
 			}
 		}
+		*/
 	}
 }
 
-int dev_id_from_dev_name()
+const char* dev_id_from_dev_name(const char* dev_name)
 {
-	return 0;
+	for (size_t i = 0; i < devices_size; ++i)
+	{
+		if (!strcmp(dev_name, devices[i].device))
+			return dev_name;
+
+		static char buf[STR_MAX];
+		memset(buf, 0, sizeof(buf));
+		sprintf(buf, "0000:%s", dev_name);
+		if (!strcmp(buf, devices[i].device))
+		{
+			return buf;
+		}
+
+		if (!strstr(dev_name, devices[i].detail)) // TODO
+		{
+			return devices[i].slot;
+		}
+	}
+
+	exit(1);
+	return NULL;
 }
 
-int unbind_one()
+void unbind_one(const char* dev_id, int force)
 {
-	return 0;
+	if (!has_driver(dev_id))
+		return;
+
+	device* dev = NULL;
+	for (size_t i = 0; i < devices_size; ++i)
+	{
+		if (!strcmp(dev_id, devices[i].slot))
+		{
+			dev = &devices[i];
+			break;
+		}
+	}
+
+	if (dev->ssh_if && !force)
+	{
+		return;
+	}
+
+    char path[STR_MAX];
+	sprintf(path, "/sys/bus/pci/drivers/%s/unbind", dev->device); // TODO mb Driver_str
+	FILE* f = fopen(path, "a");
+	if (f == NULL)
+		return;
+	fwrite(dev_id, 1, strlen(dev_id), f);
+	fclose(f);
 }
 
 int unbind_all()
