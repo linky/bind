@@ -44,7 +44,7 @@ static size_t read_all_file(const char* fname, char* buf, size_t size)
 {
 	FILE* file = fopen(fname, "r");
 	fseek(file, 0, SEEK_END);
-	size_t flen = ftell(file);
+	int flen = ftell(file);
 	fseek(file, 0, SEEK_SET);
 	flen = fread(buf, 1, size, file);
 	fclose(file);
@@ -81,7 +81,7 @@ const char* check_output(const char* cmd) // DONE
 
 	static char buffer[4024];
 	memset(buffer, 0, sizeof(buffer));
-	char *line_p = fgets(buffer, sizeof(buffer), lsofFile_p);
+	fgets(buffer, sizeof(buffer), lsofFile_p);
 	pclose(lsofFile_p);
 
 	return buffer;
@@ -99,14 +99,15 @@ const char* find_module(const char* mod) // DONE
 			return path;
 	}
 
-	char cmd[1024];
+	char cmd[STR_MAX];
 	sprintf(cmd, "modinfo -n %s", mod);
 	char* depmod_out = check_output(cmd);
 	if (!access(depmod_out, R_OK) && strcasestr(depmod_out, "error") == NULL)
 		return depmod_out;
 
 
-	char fname[100];
+	static char fname[STR_MAX];
+    memset(fname, 0, sizeof(fname));
 	sprintf(fname, "%s%s", mod, ".ko");
 	if (find_file(fname, ".") && !access(fname, R_OK)) // TODO get dirname
 	{
@@ -119,7 +120,7 @@ const char* find_module(const char* mod) // DONE
 int check_modules() // DONE
 {
 	char modules[4096];
-	size_t modules_size = read_all_file("/proc/modules", modules, sizeof(modules));
+	read_all_file("/proc/modules", modules, sizeof(modules));
 
 	char* module;
 	module = strtok(modules,"\n");
@@ -150,7 +151,7 @@ int has_driver(const char* drv)
 
 device get_pci_device_details(const char* dev_id) // DONE
 {
-	device dev;
+	device dev = {0};
 
 	strcpy(dev.ssh_if, "False");
 	strcpy(dev.active, "");
@@ -275,22 +276,28 @@ int get_nic_details()
 			}
 			strcat(devices[i].detail, buf);
 		}
-
-		/*
+/*
+         if has_driver(d):
+            modules = devices[d]["Module_str"].split(",")
+            if devices[d]["Driver_str"] in modules:
+                modules.remove(devices[d]["Driver_str"])
+                devices[d]["Module_str"] = ",".join(modules)
+ */
+		// FIXME !
 		if (has_driver(d))
 		{
 			char* driver_str = NULL;
-			for (size_t o = 0; o < DEVICES_SIZE; ++o)
+			for (size_t o = 0; o < devices_size; ++o)
 			{
-				if (!strcmp(devices[o].name, "Driver_str"))
+				if (strstr(devices[o].detail, "Driver_str"))
 				{
-					driver_str = devices[o].value;
+					driver_str = devices[o].detail;
 					break;
 				}
 			}
 
-			char* modules = calloc(strlen(val) + 20, 1); // FIXME mb
-			strcpy(modules, val);
+			char modules[STR_MAX*2];
+			strcpy(modules, driver_str);
 			line = strtok(modules, ",");
 			while (line != NULL)
 			{
@@ -302,7 +309,6 @@ int get_nic_details()
 				line = strtok(NULL, "\n");
 			}
 		}
-		*/
 	}
 }
 
@@ -398,7 +404,7 @@ void bind_one(const char* dev_id, const char* driver, int force)
 
 	for (int j = 0; j < 3; ++j)
 	{
-		if (dpdk_drivers[j]->found && strstr(dpdk_drivers, driver))
+		if (dpdk_drivers[j]->found && strstr(dpdk_drivers[j]->name, driver))
 		{
 			char path[STR_MAX];
 			sprintf(path, "/sys/bus/pci/drivers/%s/new_id", driver);
@@ -443,14 +449,14 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 		bind_one(dev_list[i], driver, force);
 	}
 
-	for (int j = 0; j < devices_size; ++j)
+	for (size_t j = 0; j < devices_size; ++j)
 	{
 		int cont = 0;
 		if (strstr(devices[j].device, "Driver_str"))
 		{
 			for (int i = 0; i < size; ++i)
 			{
-				if (strstr(dev_list, devices[i].slot)) // FIXME mb
+				if (strstr(dev_list[i], devices[i].slot)) // FIXME mb
 				{
 					cont = 1;
 				}
@@ -500,8 +506,8 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 
 int main(int argc, char* argv[])
 {
-	//check_modules();
-	//get_nic_details();
+	check_modules();
+	get_nic_details();
 
 	return 0;
 }
