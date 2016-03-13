@@ -5,7 +5,7 @@
 #include <string.h>
 #include <dirent.h>
 
-#define STR_MAX 128
+#define STR_MAX 256
 #define ETHERNET_CLASS "0200"
 #define DEVICES_SIZE 20 // FIXME mb
 
@@ -29,14 +29,21 @@ typedef struct
 	char device[STR_MAX];
 	char svendor[STR_MAX];
 	char sdevice[STR_MAX];
+	char phy_slot[STR_MAX];
 	char rev[STR_MAX];
+	char driver[STR_MAX];
+	char driver_str[STR_MAX];
+	char module[STR_MAX];
+	char module_str[STR_MAX];
+	char interface[STR_MAX];
 	int ssh_if;
 	char active[STR_MAX];
-	char detail[STR_MAX*10]; // TODO
 } device;
 
 
-driver* dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
+//driver* dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
+driver dpdk_drivers[] = {{"lpc_ich", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
+
 device devices[DEVICES_SIZE];
 size_t devices_size = 0;
 
@@ -72,17 +79,17 @@ static int find_file(const char* name, const char* dir)
 
 const char* check_output(const char* cmd) // DONE
 {
-	FILE *lsofFile_p = popen(cmd, "r");
+	FILE *f = popen(cmd, "r");
 
-	if (!lsofFile_p)
+	if (!f)
 	{
 		return NULL;
 	}
 
-	static char buffer[4024];
+	static char buffer[40960];
 	memset(buffer, 0, sizeof(buffer));
-	fgets(buffer, sizeof(buffer), lsofFile_p);
-	pclose(lsofFile_p);
+	fread(buffer, 1, sizeof(buffer), f);
+	pclose(f);
 
 	return buffer;
 }
@@ -117,7 +124,7 @@ const char* find_module(const char* mod) // DONE
 	return NULL;
 }
 
-int check_modules() // DONE
+void check_modules() // DONE
 {
 	char modules[4096];
 	read_all_file("/proc/modules", modules, sizeof(modules));
@@ -127,20 +134,23 @@ int check_modules() // DONE
 	while (module != NULL)
 	{
 		for (size_t i = 0; i < 3; ++i)
-			if (strstr(module, dpdk_drivers[i]->name)) // FIXME mb name
-				dpdk_drivers[i]->found = 1;
-			// TODO replace - _
+		{
+			if (strstr(module, dpdk_drivers[i].name))
+			{
+				// FIXME mb name
+				// TODO replace - _
+				dpdk_drivers[i].found = 1;
+			}
+		}
 		module = strtok(NULL, "\n");
 	}
-
-	return 0;
 }
 
 int has_driver(const char* drv)
 {
 	for (int i = 0; i < devices_size; ++i)
 	{
-		if (!strcmp(devices[i].slot, drv) && strstr(devices[i].detail, "Driver_str"))
+		if (!strcmp(devices[i].slot, drv) && devices[i].driver_str)
 		{
 			return 1;
 		}
@@ -149,15 +159,12 @@ int has_driver(const char* drv)
 	return 0;
 }
 
-device get_pci_device_details(const char* dev_id) // DONE
+void  get_pci_device_details(device* dev) // DONE
 {
-	device dev = {0};
-
-	strcpy(dev.ssh_if, "False");
-	strcpy(dev.active, "");
+	strcpy(dev->active, "");
 
 	char cmd[STR_MAX];
-	sprintf(cmd, "lspci -vmmks %s", dev_id);
+	sprintf(cmd, "lspci -vmmks %s", dev->slot);
 	const char* extra_info = check_output(cmd);
 
 	char* line;
@@ -170,12 +177,21 @@ device get_pci_device_details(const char* dev_id) // DONE
 
 		const char* name = strsep(&line, "\t"); // FIXME mb
 		const char* value = strsep(&line, "\t");
-		strcat(((char*)&dev) + STR_MAX*i, value); // fill device struct
+
+		char* field = NULL;
+		if (!strcmp(name, "Slot:")) field = dev->slot;
+		if (!strcmp(name, "Class:")) field = dev->class;
+		if (!strcmp(name, "Vendor:")) field = dev->vendor;
+		if (!strcmp(name, "Device:")) field = dev->device;
+		if (!strcmp(name, "SVendor:")) field = dev->svendor;
+		if (!strcmp(name, "SDevice:")) field = dev->sdevice;
+		if (!strcmp(name, "Rev:")) field = dev->rev;
+		if (!strcmp(name, "Driver:")) field = dev->driver;
+		if (!strcmp(name, "Module:")) field = dev->module;
+		strcat(field, value);
 
 		line = strtok(NULL, "\n");
 	}
-
-	return dev;
 }
 
 int get_nic_details()
@@ -189,7 +205,7 @@ int get_nic_details()
 	int i = 0;
 	while (dev_line != NULL)
 	{
-		if (strlen(dev_line) == 0)
+		if (strstr(dev_line, "Slot"))
 		{
 			i = 0;
 			if (!strcmp(dev.class, ETHERNET_CLASS))
@@ -198,15 +214,13 @@ int get_nic_details()
 				++devices_size;
 			}
 		}
-		else
-		{
-			const char* name = strsep(&dev_line, "\t");
-			const char* value = strsep(&dev_line, "\t");
-			strcpy(((char*)&dev) + STR_MAX*i, value); // fill device struct
-			++i;
-		}
 
-		strtok(NULL, "\n");
+		const char* name = strsep(&dev_line, "\t");
+		const char* value = strsep(&dev_line, "\t");
+		strcpy(((char*)&dev) + STR_MAX*i, value); // fill device struct
+
+		dev_line = strtok(NULL, "\n");
+		++i;
 	}
 
 
@@ -223,27 +237,26 @@ int get_nic_details()
 		line = strtok(NULL, "\n");
 	}
 	char* rt_info = calloc(strlen(new_route), 1);
-	line = strtok(new_route, " \n");
+	line = strtok(new_route, " ");
 	while (line != NULL)
 	{
-		if (strcmp(line, "dev"))
+		if (!strcmp(line, "dev"))
 		{
-			line = strtok(NULL, "\n");
+			line = strtok(NULL, " ");
 			strcat(ssh_if[ssh_if_size], line);
 			++ssh_if_size;
 			continue;
 		}
-		line = strtok(NULL, "\n");
+		line = strtok(NULL, " ");
 	}
 
 	for (size_t i = 0; i < devices_size; ++i)
 	{
-		char* d = devices[i].slot;
-		strcpy(devices[i].detail, get_pci_device_details(d).detail); // TODO remove detail
+		get_pci_device_details(&devices[i]);
 
 		for (size_t j = 0; j < ssh_if_size; ++j)
 		{
-			if (strstr(devices[i].detail, ssh_if[j]))
+			if (strstr(devices[i].driver, ssh_if[j]))
 			{
 				devices[i].ssh_if = 1;
 				strcpy(devices[i].active, "*Active*");
@@ -251,15 +264,15 @@ int get_nic_details()
 			}
 		}
 
-		if (strstr(devices[i].detail, "Module_str"))
+		if (devices[i].module_str)
 		{
 			for (size_t j = 0; j < 3; ++j)
 			{
-				if (dpdk_drivers[j]->found && strstr(devices[i].detail, dpdk_drivers[j]->name))
+				if (dpdk_drivers[j].found && strstr(devices[i].module_str, dpdk_drivers[j].name) == NULL)
 				{
 					char buf[STR_MAX];
-					sprintf(buf, "%s,%s", devices[i].detail, dpdk_drivers[j]->name);
-					strcpy(devices[i].detail, buf);
+					sprintf(buf, "%s,%s", devices[i].module_str, dpdk_drivers[j].name);
+					strcpy(devices[i].module_str, buf);
 				}
 			}
 		}
@@ -268,13 +281,13 @@ int get_nic_details()
 			char buf[STR_MAX];
 			for (size_t j = 0; j < 3; ++j)
 			{
-				if (dpdk_drivers[j]->found)
+				if (dpdk_drivers[j].found)
 				{
-					strcat(buf, dpdk_drivers[j]->name);
+					strcat(buf, dpdk_drivers[j].name);
 					strcat(buf, ",");
 				}
 			}
-			strcat(devices[i].detail, buf);
+			strcat(devices[i].module_str, buf);
 		}
 /*
          if has_driver(d):
@@ -284,14 +297,14 @@ int get_nic_details()
                 devices[d]["Module_str"] = ",".join(modules)
  */
 		// FIXME !
-		if (has_driver(d))
+		if (has_driver(devices[i].slot))
 		{
 			char* driver_str = NULL;
 			for (size_t o = 0; o < devices_size; ++o)
 			{
-				if (strstr(devices[o].detail, "Driver_str"))
+				if (devices[o].driver_str)
 				{
-					driver_str = devices[o].detail;
+					driver_str = devices[o].driver_str;
 					break;
 				}
 			}
@@ -327,7 +340,7 @@ const char* dev_id_from_dev_name(const char* dev_name)
 			return buf;
 		}
 
-		if (!strstr(dev_name, devices[i].detail)) // TODO
+		if (strstr(dev_name, devices[i].interface)) // FIXME mb
 		{
 			return devices[i].slot;
 		}
@@ -404,7 +417,7 @@ void bind_one(const char* dev_id, const char* driver, int force)
 
 	for (int j = 0; j < 3; ++j)
 	{
-		if (dpdk_drivers[j]->found && strstr(dpdk_drivers[j]->name, driver))
+		if (dpdk_drivers[j].found && strstr(dpdk_drivers[j].name, driver))
 		{
 			char path[STR_MAX];
 			sprintf(path, "/sys/bus/pci/drivers/%s/new_id", driver);
@@ -429,7 +442,9 @@ void bind_one(const char* dev_id, const char* driver, int force)
 	fclose(f);
 	if (ret <= 0)
 	{
-		device tmp = get_pci_device_details(dev_id);
+		device tmp = {0};
+		strcpy(tmp.slot, dev_id);
+		get_pci_device_details(&tmp);
 		if (!strstr(tmp.device, "Driver_str")) // TODO Driver_str
 		{
 			return;
@@ -468,9 +483,9 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 		}
 
 		char* d = devices[j].slot;
-		strcpy(devices[j].detail, get_pci_device_details(d).detail); // TODO remove detail
+		get_pci_device_details(&devices[j]);
 
-		if (strstr(devices->detail, "Drive_str"))
+		if (devices->driver_str)
 		{
 			unbind_one(d, force);
 		}
@@ -490,7 +505,7 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 		 int found = 0;
 		 for (int j = 0; j < 3; ++j)
 		 {
-			 if (dpdk_drivers[j]->found && strstr(devices[i].device, dpdk_drivers[j]->name)) // FIXME
+			 if (dpdk_drivers[j].found && strstr(devices[i].device, dpdk_drivers[j].name)) // FIXME
 			 {
 				 strcat(dpdk_drv, devices[i].slot);
 				 found = 1;
