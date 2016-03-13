@@ -137,7 +137,14 @@ int check_modules() // DONE
 
 int has_driver(const char* drv)
 {
-	// TODO
+	for (int i = 0; i < devices_size; ++i)
+	{
+		if (!strcmp(devices[i].slot, drv) && strstr(devices[i].detail, "Driver_str"))
+		{
+			return 1;
+		}
+	}
+
 	return 0;
 }
 
@@ -148,7 +155,7 @@ device get_pci_device_details(const char* dev_id) // DONE
 	strcpy(dev.ssh_if, "False");
 	strcpy(dev.active, "");
 
-	char cmd[256];
+	char cmd[STR_MAX];
 	sprintf(cmd, "lspci -vmmks %s", dev_id);
 	const char* extra_info = check_output(cmd);
 
@@ -464,10 +471,37 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 	}
 }
 
+ int show_status(char* kernel_drv, char* dpdk_drv, char* no_drv)
+ {
+	 for (int i = 0; i < devices_size; ++i)
+	 {
+		 if (!has_driver(devices[i].slot))
+		 {
+			 strcat(no_drv, devices[i].slot);
+			 continue;
+		 }
+
+		 int found = 0;
+		 for (int j = 0; j < 3; ++j)
+		 {
+			 if (dpdk_drivers[j]->found && strstr(devices[i].device, dpdk_drivers[j]->name)) // FIXME
+			 {
+				 strcat(dpdk_drv, devices[i].slot);
+				 found = 1;
+			 }
+		 }
+
+		 if (!found)
+		 {
+			 strcat(kernel_drv, devices[i].slot);
+		 }
+	 }
+ }
+
 int main(int argc, char* argv[])
 {
 	//check_modules();
 	//get_nic_details();
-	
+
 	return 0;
 }
