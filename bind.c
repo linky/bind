@@ -30,7 +30,7 @@ static int find_file(const char* name, const char* dir)
 	struct dirent *dp = NULL;
 	while ((dp = readdir(dirp)) != NULL)
 	{
-		if (!strcmp(dp->d_name, name)) // FIXME mb
+		if (!strcmp(dp->d_name, name))
 		{
 			closedir(dirp);
 			return 1;
@@ -302,13 +302,7 @@ void get_nic_details()
 			}
 			strcat(devices[i].module_str, buf);
 		}
-/*
-         if has_driver(d):
-            modules = devices[d]["Module_str"].split(",")
-            if devices[d]["Driver_str"] in modules:
-                modules.remove(devices[d]["Driver_str"])
-                devices[d]["Module_str"] = ",".join(modules)
- */
+
 		if (has_driver(devices[i].slot))
 		{
 			char* driver_str = NULL;
