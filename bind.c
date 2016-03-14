@@ -115,7 +115,7 @@ const char* find_module(const char* mod)
 
 
 	static char fname[STR_MAX];
-    memset(fname, 0, sizeof(fname));
+	memset(fname, 0, sizeof(fname));
 	sprintf(fname, "%s%s", mod, ".ko");
 	if (find_file(fname, ".") && !access(fname, R_OK)) // TODO get dirname
 	{
@@ -134,7 +134,7 @@ void check_modules()
 	module = strtok(modules,"\n");
 	while (module != NULL)
 	{
-		for (size_t i = 0; i < 3; ++i)
+		for (size_t i = 0; i < DPDK_SIZE; ++i)
 		{
 			if (strstr(module, dpdk_drivers[i].name))
 			{
@@ -281,7 +281,7 @@ void get_nic_details()
 
 		if (devices[i].module_str[0])
 		{
-			for (size_t j = 0; j < 3; ++j)
+			for (size_t j = 0; j < DPDK_SIZE; ++j)
 			{
 				if (dpdk_drivers[j].found && strstr(devices[i].module_str, dpdk_drivers[j].name) == NULL)
 				{
@@ -294,7 +294,7 @@ void get_nic_details()
 		else
 		{
 			char buf[STR_MAX] = {0};
-			for (size_t j = 0; j < 3; ++j)
+			for (size_t j = 0; j < DPDK_SIZE; ++j)
 			{
 				if (dpdk_drivers[j].found)
 				{
@@ -429,7 +429,7 @@ void bind_one(const char* dev_id, const char* driver, int force)
 		}
 	}
 
-	for (int j = 0; j < 3; ++j)
+	for (int j = 0; j < DPDK_SIZE; ++j)
 	{
 		if (dpdk_drivers[j].found && strstr(dpdk_drivers[j].name, driver))
 		{
@@ -459,7 +459,7 @@ void bind_one(const char* dev_id, const char* driver, int force)
 		device tmp = {0};
 		strcpy(tmp.slot, dev_id);
 		get_pci_device_details(&tmp);
-		if (!strstr(tmp.device, "Driver_str")) // TODO Driver_str
+		if (!tmp.driver_str[0])
 		{
 			return;
 		}
@@ -517,7 +517,7 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 		 }
 
 		 int found = 0;
-		 for (int j = 0; j < 3; ++j)
+		 for (int j = 0; j < DPDK_SIZE; ++j)
 		 {
 			 if (dpdk_drivers[j].found && strstr(devices[i].device, dpdk_drivers[j].name)) // FIXME
 			 {

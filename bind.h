@@ -4,7 +4,8 @@
 
 #define STR_MAX 256
 #define ETHERNET_CLASS "0200"
-#define DEVICES_SIZE 20 // FIXME mb
+#define DEVICES_SIZE 20
+#define DPDK_SIZE 3
 
 typedef struct driver
 {
