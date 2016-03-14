@@ -194,17 +194,19 @@ void  get_pci_device_details(device* dev)
 
 		char* field = NULL;
 		if (!strcmp(name, "Slot:")) field = dev->slot;
-		if (!strcmp(name, "Class:")) field = dev->class;
-		if (!strcmp(name, "Vendor:")) field = dev->vendor;
-		if (!strcmp(name, "Device:")) field = dev->device;
-		if (!strcmp(name, "SVendor:")) field = dev->svendor;
-		if (!strcmp(name, "SDevice:")) field = dev->sdevice;
-		if (!strcmp(name, "Rev:")) field = dev->rev;
-		if (!strcmp(name, "Driver:")) field = dev->driver;
-		if (!strcmp(name, "Module:")) field = dev->module;
-		if (!strcmp(name, "Interface:")) field = dev->interface;
-		if (!strcmp(name, "PhySlot:")) field = dev->phy_slot;
-		strcpy(field, value);
+		else if (!strcmp(name, "Class:")) field = dev->class;
+		else if (!strcmp(name, "Vendor:")) field = dev->vendor;
+		else if (!strcmp(name, "Device:")) field = dev->device;
+		else if (!strcmp(name, "SVendor:")) field = dev->svendor;
+		else if (!strcmp(name, "SDevice:")) field = dev->sdevice;
+		else if (!strcmp(name, "Rev:")) field = dev->rev;
+		else if (!strcmp(name, "Driver:")) field = dev->driver;
+		else if (!strcmp(name, "Module:")) field = dev->module;
+		else if (!strcmp(name, "Interface:")) field = dev->interface;
+		else if (!strcmp(name, "PhySlot:")) field = dev->phy_slot;
+
+		if (field)
+			strcpy(field, value);
 
 		line = strtok(NULL, "\n");
 	}
@@ -235,18 +237,20 @@ void get_nic_details()
 		const char* value = strsep(&dev_line, "\t");
 		char* field = NULL;
 		if (!strcmp(name, "Slot:")) field = dev.slot;
-		if (!strcmp(name, "Class:")) field = dev.class;
-		if (!strcmp(name, "Vendor:")) field = dev.vendor;
-		if (!strcmp(name, "Device:")) field = dev.device;
-		if (!strcmp(name, "SVendor:")) field = dev.svendor;
-		if (!strcmp(name, "SDevice:")) field = dev.sdevice;
-		if (!strcmp(name, "Rev:")) field = dev.rev;
-		if (!strcmp(name, "Driver:")) field = dev.driver;
-		if (!strcmp(name, "Module:")) field = dev.module;
-		if (!strcmp(name, "ProgIf:")) field = dev.progif;
-		if (!strcmp(name, "Interface:")) field = dev.interface;
-		if (!strcmp(name, "PhySlot:")) field = dev.phy_slot;
-		strcpy(field, value);
+		else if (!strcmp(name, "Class:")) field = dev.class;
+		else if (!strcmp(name, "Vendor:")) field = dev.vendor;
+		else if (!strcmp(name, "Device:")) field = dev.device;
+		else if (!strcmp(name, "SVendor:")) field = dev.svendor;
+		else if (!strcmp(name, "SDevice:")) field = dev.sdevice;
+		else if (!strcmp(name, "Rev:")) field = dev.rev;
+		else if (!strcmp(name, "Driver:")) field = dev.driver;
+		else if (!strcmp(name, "Module:")) field = dev.module;
+		else if (!strcmp(name, "ProgIf:")) field = dev.progif;
+		else if (!strcmp(name, "Interface:")) field = dev.interface;
+		else if (!strcmp(name, "PhySlot:")) field = dev.phy_slot;
+
+		if (field)
+			strcpy(field, value);
 
 		dev_line = strtok(NULL, "\n");
 		++i;
@@ -567,7 +571,6 @@ int main(int argc, char* argv[])
 	device a[DSIZE], b[DSIZE], c[DSIZE];
 	size_t asize = DSIZE, bsize = DSIZE, csize = DSIZE;
 	show_status(a, &asize, b, &bsize, c, &csize);
-
 	static char buf[STR_MAX*20];
 	device_to_str(c, buf);
 	puts(buf);
