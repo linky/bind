@@ -138,9 +138,23 @@ void check_modules()
 		{
 			if (strstr(module, dpdk_drivers[i].name))
 			{
-				// FIXME mb name
-				// TODO replace - _
 				dpdk_drivers[i].found = 1;
+			}
+			else
+			{
+				char tmp[STR_MAX];
+				strcpy(tmp, dpdk_drivers[i].name);
+
+				for (size_t j = 0; j < strlen(tmp); ++j) // "_" -> "-"
+				{
+					if (tmp[j] == '_')
+						tmp[j] = '-';
+				}
+
+				if (strstr(module, tmp))
+				{
+					dpdk_drivers[i].found = 1;
+				}
 			}
 		}
 		module = strtok(NULL, "\n");
