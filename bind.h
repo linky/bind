@@ -40,7 +40,7 @@ void check_modules();
 
 int has_driver(const char* drv);
 
-void  get_pci_device_details(device* dev);
+void get_pci_device_details(device* dev);
 
 void get_nic_details();
 

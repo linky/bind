@@ -87,7 +87,7 @@ char* check_output(const char* cmd)
 		return NULL;
 	}
 
-	static char buffer[40960];
+	static char buffer[STR_MAX*20];
 	memset(buffer, 0, sizeof(buffer));
 	fread(buffer, 1, sizeof(buffer), f);
 	pclose(f);
@@ -188,6 +188,7 @@ void  get_pci_device_details(device* dev)
 		if (!strcmp(name, "Rev:")) field = dev->rev;
 		if (!strcmp(name, "Driver:")) field = dev->driver;
 		if (!strcmp(name, "Module:")) field = dev->module;
+		if (!strcmp(name, "Interface:")) field = dev->interface;
 		strcpy(field, value);
 
 		line = strtok(NULL, "\n");
@@ -228,6 +229,7 @@ void get_nic_details()
 		if (!strcmp(name, "Driver:")) field = dev.driver;
 		if (!strcmp(name, "Module:")) field = dev.module;
 		if (!strcmp(name, "ProgIf:")) field = dev.progif;
+		if (!strcmp(name, "Interface:")) field = dev.interface;
 		strcpy(field, value);
 
 		dev_line = strtok(NULL, "\n");
