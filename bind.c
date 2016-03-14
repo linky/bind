@@ -8,7 +8,7 @@
 #include "bind.h"
 
 static driver dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
-//driver dpdk_drivers[] = {{"lpc_ich", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}}; // TODO remove
+//static driver dpdk_drivers[] = {{"lpc_ich", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}}; // TODO remove
 
 static device devices[DEVICES_SIZE];
 static size_t devices_size = 0;
@@ -41,6 +41,42 @@ static int find_file(const char* name, const char* dir)
 	return 0;
 }
 
+static void device_to_str(const device* dev, char* str)
+{
+	sprintf(str,
+		"Slot:\t%s\n"
+		"Class:\t%s\n"
+		"Vendor:\t%s\n"
+		"Device:\t%s\n"
+		"SVendor:\t%s\n"
+		"SDevice:\t%s\n"
+		"PhySlot:\t%s\n"
+		"Rev:\t%s\n"
+		"Driver:\t%s\n"
+		"DriverStr:\t%s\n"
+		"Module:\t%s\n"
+		"ModuleStr:\t%s\n"
+		"Interface:\t%s\n"
+		"ProgIf:\t%s\n"
+		"Active:\t%s\n"
+		"ssh_if:\t%d\n",
+		dev->slot,
+		dev->class,
+		dev->vendor,
+		dev->device,
+		dev->svendor,
+		dev->sdevice,
+		dev->phy_slot,
+		dev->rev,
+		dev->driver,
+		dev->driver_str,
+		dev->module,
+		dev->module_str,
+		dev->interface,
+		dev->progif,
+		dev->active,
+		dev->ssh_if);
+}
 
 char* check_output(const char* cmd)
 {
@@ -480,7 +516,7 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 	 {
 		 if (!has_driver(devices[i].slot))
 		 {
-			 memcpy(no_drv, (char*)(devices + i), sizeof(device)); // FIXME \0
+			 device_to_str(devices + i, no_drv);
 			 continue;
 		 }
 
@@ -489,14 +525,14 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 		 {
 			 if (dpdk_drivers[j].found && strstr(devices[i].device, dpdk_drivers[j].name)) // FIXME
 			 {
-				 memcpy(dpdk_drv, (char*)(devices + i), sizeof(device)); // FIXME \0
+				 device_to_str(devices + i, dpdk_drv);
 				 found = 1;
 			 }
 		 }
 
 		 if (!found)
 		 {
-			 memcpy(kernel_drv, (char*)(devices + i), sizeof(device)); // FIXME \0
+			 device_to_str(devices + i, kernel_drv);
 		 }
 	 }
  }
@@ -506,8 +542,14 @@ int main(int argc, char* argv[])
 {
 	check_modules();
 	get_nic_details();
-	char a[sizeof(device)];
-	show_status(a, a, a);
+
+	char a[sizeof(device) + 1] = {0};
+	char b[sizeof(device) + 1] = {0};
+	char c[sizeof(device) + 1] = {0};
+	show_status(a, b, c);
+	puts(a);
+	puts(b);
+	puts(c);
 
 	return 0;
 }

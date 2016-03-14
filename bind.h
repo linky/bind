@@ -28,8 +28,8 @@ typedef struct
     char module_str[STR_MAX];
     char interface[STR_MAX];
     char progif[STR_MAX];
-    int ssh_if;
     char active[STR_MAX];
+    int ssh_if;
 } device;
 
 char* check_output(const char* cmd);
