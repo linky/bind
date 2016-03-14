@@ -117,7 +117,7 @@ const char* find_module(const char* mod)
 	static char fname[STR_MAX];
 	memset(fname, 0, sizeof(fname));
 	sprintf(fname, "%s%s", mod, ".ko");
-	if (find_file(fname, ".") && !access(fname, R_OK)) // TODO get dirname
+	if (find_file(fname, ".") && !access(fname, R_OK))
 	{
 		return fname;
 	}
@@ -374,7 +374,7 @@ const char* dev_id_from_dev_name(const char* dev_name)
 			return buf;
 		}
 
-		if (strstr(dev_name, devices[i].interface)) // FIXME mb
+		if (strstr(devices[i].interface, dev_name))
 		{
 			return devices[i].slot;
 		}
@@ -405,7 +405,7 @@ void unbind_one(const char* dev_id, int force)
 	}
 
     char path[STR_MAX];
-	sprintf(path, "/sys/bus/pci/drivers/%s/unbind", dev->device); // TODO mb Driver_str
+	sprintf(path, "/sys/bus/pci/drivers/%s/unbind", dev->driver_str);
 	FILE* f = fopen(path, "a");
 	if (f == NULL)
 		return;
@@ -435,15 +435,15 @@ void bind_one(const char* dev_id, const char* driver, int force)
 		return;
 
 	const char* saved_driver = NULL;
-	if (has_driver(dev->slot)) // FIXME mb !slot
+	if (has_driver(dev_id))
 	{
-		if (!strcmp(dev->device, driver))
+		if (!strcmp(dev->driver_str, driver))
 		{
 			return;
 		}
 		else
 		{
-			saved_driver = dev->device; // TODO mb Driver_str
+			saved_driver = dev->driver_str;
 			unbind_one(dev_id, force);
 			strcpy(dev->device, "");
 		}
@@ -501,11 +501,11 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 	for (size_t j = 0; j < devices_size; ++j)
 	{
 		int cont = 0;
-		if (strstr(devices[j].device, "Driver_str"))
+		if (devices[j].driver_str[0])
 		{
 			for (int i = 0; i < size; ++i)
 			{
-				if (strstr(dev_list[i], devices[i].slot)) // FIXME mb
+				if (strstr(dev_list[i], devices[i].slot))
 				{
 					cont = 1;
 				}
