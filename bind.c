@@ -36,6 +36,7 @@ typedef struct
 	char module[STR_MAX];
 	char module_str[STR_MAX];
 	char interface[STR_MAX];
+	char progif[STR_MAX];
 	int ssh_if;
 	char active[STR_MAX];
 } device;
@@ -188,7 +189,7 @@ void  get_pci_device_details(device* dev) // DONE
 		if (!strcmp(name, "Rev:")) field = dev->rev;
 		if (!strcmp(name, "Driver:")) field = dev->driver;
 		if (!strcmp(name, "Module:")) field = dev->module;
-		strcat(field, value);
+		strcpy(field, value);
 
 		line = strtok(NULL, "\n");
 	}
@@ -217,7 +218,18 @@ int get_nic_details()
 
 		const char* name = strsep(&dev_line, "\t");
 		const char* value = strsep(&dev_line, "\t");
-		strcpy(((char*)&dev) + STR_MAX*i, value); // fill device struct
+		char* field = NULL;
+		if (!strcmp(name, "Slot:")) field = dev.slot;
+		if (!strcmp(name, "Class:")) field = dev.class;
+		if (!strcmp(name, "Vendor:")) field = dev.vendor;
+		if (!strcmp(name, "Device:")) field = dev.device;
+		if (!strcmp(name, "SVendor:")) field = dev.svendor;
+		if (!strcmp(name, "SDevice:")) field = dev.sdevice;
+		if (!strcmp(name, "Rev:")) field = dev.rev;
+		if (!strcmp(name, "Driver:")) field = dev.driver;
+		if (!strcmp(name, "Module:")) field = dev.module;
+		if (!strcmp(name, "ProgIf:")) field = dev.progif;
+		strcpy(field, value);
 
 		dev_line = strtok(NULL, "\n");
 		++i;
@@ -498,7 +510,7 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 	 {
 		 if (!has_driver(devices[i].slot))
 		 {
-			 strcat(no_drv, devices[i].slot);
+			 memcpy(no_drv, (char*)(devices + i), sizeof(device)); // FIXME mb
 			 continue;
 		 }
 
@@ -507,14 +519,14 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 		 {
 			 if (dpdk_drivers[j].found && strstr(devices[i].device, dpdk_drivers[j].name)) // FIXME
 			 {
-				 strcat(dpdk_drv, devices[i].slot);
+				 memcpy(dpdk_drv, (char*)(devices + i), sizeof(device)); // FIXME mb
 				 found = 1;
 			 }
 		 }
 
 		 if (!found)
 		 {
-			 strcat(kernel_drv, devices[i].slot);
+			 memcpy(kernel_drv, (char*)(devices + i), sizeof(device)); // FIXME mb
 		 }
 	 }
  }
@@ -523,6 +535,8 @@ int main(int argc, char* argv[])
 {
 	check_modules();
 	get_nic_details();
+	char a[sizeof(device)];
+	show_status(a, a, a);
 
 	return 0;
 }
