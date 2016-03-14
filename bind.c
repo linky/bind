@@ -8,8 +8,6 @@
 #include "bind.h"
 
 static driver dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
-//static driver dpdk_drivers[] = {{"lpc_ich", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}}; // TODO remove
-
 static device devices[DEVICES_SIZE];
 static size_t devices_size = 0;
 
@@ -81,7 +79,6 @@ static void device_to_str(const device* dev, char* str)
 char* check_output(const char* cmd)
 {
 	FILE *f = popen(cmd, "r");
-
 	if (!f)
 	{
 		return NULL;
@@ -104,15 +101,18 @@ const char* find_module(const char* mod)
 		static char path[PATH_MAX];
 		sprintf(path, "%s/%s/kmod/%s.ko", rte_sdk, rte_target, mod);
 		if (!access(path, R_OK))
+		{
 			return path;
+		}
 	}
 
 	char cmd[STR_MAX];
 	sprintf(cmd, "modinfo -n %s", mod);
 	char* depmod_out = check_output(cmd);
 	if (!access(depmod_out, R_OK) && strcasestr(depmod_out, "error") == NULL)
+	{
 		return depmod_out;
-
+	}
 
 	static char fname[STR_MAX];
 	memset(fname, 0, sizeof(fname));
@@ -148,7 +148,9 @@ void check_modules()
 				for (size_t j = 0; j < strlen(tmp); ++j) // "_" -> "-"
 				{
 					if (tmp[j] == '_')
+					{
 						tmp[j] = '-';
+					}
 				}
 
 				if (strstr(module, tmp))
@@ -187,7 +189,9 @@ void  get_pci_device_details(device* dev)
 	while (line != NULL)
 	{
 		if (line == NULL || strlen(line) == 0)
+		{
 			continue;
+		}
 
 		const char* name = strsep(&line, "\t");
 		const char* value = strsep(&line, "\t");
@@ -206,7 +210,9 @@ void  get_pci_device_details(device* dev)
 		else if (!strcmp(name, "PhySlot:")) field = dev->phy_slot;
 
 		if (field)
+		{
 			strcpy(field, value);
+		}
 
 		line = strtok(NULL, "\n");
 	}
@@ -233,9 +239,9 @@ void get_nic_details()
 			}
 		}
 
-		const char* name = strsep(&dev_line, "\t");
-		const char* value = strsep(&dev_line, "\t");
-		char* field = NULL;
+		const char *name = strsep(&dev_line, "\t");
+		const char *value = strsep(&dev_line, "\t");
+		char *field = NULL;
 		if (!strcmp(name, "Slot:")) field = dev.slot;
 		else if (!strcmp(name, "Class:")) field = dev.class;
 		else if (!strcmp(name, "Vendor:")) field = dev.vendor;
@@ -250,7 +256,9 @@ void get_nic_details()
 		else if (!strcmp(name, "PhySlot:")) field = dev.phy_slot;
 
 		if (field)
+		{
 			strcpy(field, value);
+		}
 
 		dev_line = strtok(NULL, "\n");
 		++i;
@@ -266,7 +274,9 @@ void get_nic_details()
 	while (line != NULL)
 	{
 		if (strstr(line, "169.254") == NULL)
+		{
 			strcat(new_route, line);
+		}
 		line = strtok(NULL, "\n");
 	}
 
@@ -277,7 +287,9 @@ void get_nic_details()
 		{
 			line = strtok(NULL, " ");
 			if (line == NULL)
+			{
 				break;
+			}
 			strcat(ssh_if[ssh_if_size], line);
 			++ssh_if_size;
 			continue;
@@ -364,7 +376,9 @@ const char* dev_id_from_dev_name(const char* dev_name)
 	for (size_t i = 0; i < devices_size; ++i)
 	{
 		if (!strcmp(dev_name, devices[i].device))
+		{
 			return dev_name;
+		}
 
 		static char buf[STR_MAX];
 		memset(buf, 0, sizeof(buf));
@@ -387,7 +401,9 @@ const char* dev_id_from_dev_name(const char* dev_name)
 void unbind_one(const char* dev_id, int force)
 {
 	if (!has_driver(dev_id))
+	{
 		return;
+	}
 
 	device* dev = NULL;
 	for (size_t i = 0; i < devices_size; ++i)
@@ -408,7 +424,10 @@ void unbind_one(const char* dev_id, int force)
 	sprintf(path, "/sys/bus/pci/drivers/%s/unbind", dev->driver_str);
 	FILE* f = fopen(path, "a");
 	if (f == NULL)
+	{
 		return;
+	}
+
 	fwrite(dev_id, 1, strlen(dev_id), f);
 	fclose(f);
 }
@@ -424,7 +443,8 @@ void unbind_all(const char* dev_list[], size_t size, int force)
 void bind_one(const char* dev_id, const char* driver, int force)
 {
 	device* dev = NULL;
-	for (int i = 0; i < devices_size; ++i) {
+	for (int i = 0; i < devices_size; ++i)
+	{
 		if (!strcmp(dev_id, devices[i].slot))
 		{
 			dev = devices + i;
@@ -432,7 +452,9 @@ void bind_one(const char* dev_id, const char* driver, int force)
 	}
 
 	if (dev->ssh_if && !force)
+	{
 		return;
+	}
 
 	const char* saved_driver = NULL;
 	if (has_driver(dev_id))
