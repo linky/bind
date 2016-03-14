@@ -55,4 +55,4 @@ void bind_one(const char* dev_id, const char* driver, int force);
 
 void bind_all(const char* dev_list[], size_t size, const char* driver, int force);
 
-void show_status(char* kernel_drv, char* dpdk_drv, char* no_drv);
+void show_status(device* kernel_drv, size_t* kernel_drv_size, device* dpdk_drv, size_t* dpdk_drv_size, device* no_drv, size_t* no_drv_size);

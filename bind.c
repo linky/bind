@@ -189,6 +189,7 @@ void  get_pci_device_details(device* dev)
 		if (!strcmp(name, "Driver:")) field = dev->driver;
 		if (!strcmp(name, "Module:")) field = dev->module;
 		if (!strcmp(name, "Interface:")) field = dev->interface;
+		if (!strcmp(name, "PhySlot:")) field = dev->phy_slot;
 		strcpy(field, value);
 
 		line = strtok(NULL, "\n");
@@ -230,6 +231,7 @@ void get_nic_details()
 		if (!strcmp(name, "Module:")) field = dev.module;
 		if (!strcmp(name, "ProgIf:")) field = dev.progif;
 		if (!strcmp(name, "Interface:")) field = dev.interface;
+		if (!strcmp(name, "PhySlot:")) field = dev.phy_slot;
 		strcpy(field, value);
 
 		dev_line = strtok(NULL, "\n");
@@ -267,7 +269,7 @@ void get_nic_details()
 
 	for (size_t i = 0; i < devices_size; ++i)
 	{
-		get_pci_device_details(&devices[i]);
+		get_pci_device_details(devices + i);
 
 		for (size_t j = 0; j < ssh_if_size; ++j)
 		{
@@ -506,31 +508,39 @@ void bind_all(const char* dev_list[], size_t size, const char* driver, int force
 	}
 }
 
- void show_status(char* kernel_drv, char* dpdk_drv, char* no_drv)
+ void show_status(device* kernel_drv, size_t* kernel_drv_size, device* dpdk_drv, size_t* dpdk_drv_size, device* no_drv, size_t* no_drv_size)
  {
+	 size_t ksize = 0, dpdksize = 0, nosize = 0;
 	 for (int i = 0; i < devices_size; ++i)
 	 {
-		 if (!has_driver(devices[i].slot))
+		 if (!has_driver(devices[i].slot) && ksize < *kernel_drv_size)
 		 {
-			 device_to_str(devices + i, no_drv);
+			 kernel_drv[ksize] = devices[i];
+			 ++ksize;
 			 continue;
 		 }
 
 		 int found = 0;
 		 for (int j = 0; j < DPDK_SIZE; ++j)
 		 {
-			 if (dpdk_drivers[j].found && strstr(devices[i].device, dpdk_drivers[j].name)) // FIXME
+			 if (dpdk_drivers[j].found && strstr(devices[i].driver_str, dpdk_drivers[j].name) && dpdksize < *dpdk_drv_size)
 			 {
-				 device_to_str(devices + i, dpdk_drv);
+				 dpdk_drv[dpdksize] = devices[i];
+				 ++dpdksize;
 				 found = 1;
 			 }
 		 }
 
-		 if (!found)
+		 if (!found && nosize < *no_drv_size)
 		 {
-			 device_to_str(devices + i, kernel_drv);
+			 no_drv[nosize] = devices[i];
+			 ++nosize;
 		 }
 	 }
+
+	 *kernel_drv_size = ksize;
+	 *dpdk_drv_size = dpdksize;
+	 *no_drv_size = nosize;
  }
 
 #ifndef NOMAIN
@@ -539,13 +549,14 @@ int main(int argc, char* argv[])
 	check_modules();
 	get_nic_details();
 
-	char a[sizeof(device) + 1] = {0};
-	char b[sizeof(device) + 1] = {0};
-	char c[sizeof(device) + 1] = {0};
-	show_status(a, b, c);
-	puts(a);
-	puts(b);
-	puts(c);
+	enum { DSIZE = 10 };
+	device a[DSIZE], b[DSIZE], c[DSIZE];
+	size_t asize = DSIZE, bsize = DSIZE, csize = DSIZE;
+	show_status(a, &asize, b, &bsize, c, &csize);
+
+	static char buf[STR_MAX*20];
+	device_to_str(c, buf);
+	puts(buf);
 
 	return 0;
 }
