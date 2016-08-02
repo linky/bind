@@ -7,6 +7,7 @@
 
 #include "bind.h"
 
+
 static driver dpdk_drivers[] = {{"igb_uio", 0}, {"vfio-pci", 0}, {"uio_pci_generic", 0}};
 static device devices[DEVICES_SIZE];
 static size_t devices_size = 0;
