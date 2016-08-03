@@ -1,3 +1,4 @@
+#MAKEFILE
 TARGET=bind
 
 CC=gcc
