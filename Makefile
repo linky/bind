@@ -1,6 +1,6 @@
 TARGET=bind
 
-CC=gcc
+CC = gcc
 CFLAGS = -Wall -Os
 SOURCES = bind.c
 
